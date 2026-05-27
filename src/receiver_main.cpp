@@ -34,7 +34,6 @@ extern "C" {
 // PLAINTEXT_DEBUG 1 = skip AES entirely, expect raw packets.
 // MUST match the same value in remote_main.cpp.
 // MUST be 0 for production deployment.
-<<<<<<< HEAD
 #define PLAINTEXT_DEBUG 0
 
 // ---- Output mode ------------------------------------------
@@ -57,15 +56,16 @@ extern "C" {
 #define OUTPUT_MODE_BUZZER_SIMPLE 3
 
 #define OUTPUT_MODE  OUTPUT_MODE_RELAY    // ← change this line to switch mode
-=======
-#define PLAINTEXT_DEBUG 1
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
 
 // ---- Configuration ----------------------------------------
 #define CHANNEL          1
+#ifndef OUTPUT_PIN
 #define OUTPUT_PIN       D5        // Relay signal pin or buzzer pin
+#endif
                                    // ESP-01 receiver: change to 2 (GPIO2)
+#ifndef PAIRING_BTN_PIN
 #define PAIRING_BTN_PIN  D2        // Active LOW — INPUT_PULLUP, button to GND
+#endif
                                    // ESP-01 receiver: change to 0 (GPIO0, careful)
 #define RING_DURATION    3000      // ms relay held / buzzer on (was 5000)
 #define MAX_REMOTES      8
@@ -277,19 +277,17 @@ void enterPairingMode() {
   pairingMode  = true;
   pairingStart = millis();
   DBGLN("[PAIR] Pairing mode OPEN — press remote button within 10s");
-<<<<<<< HEAD
+
   // 3 rapid beeps/clicks = pairing open
 #if OUTPUT_MODE == OUTPUT_MODE_RELAY
-=======
-  // 3 rapid beeps = pairing open
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
   for (int i = 0; i < 3; i++) {
     digitalWrite(OUTPUT_PIN, RELAY_ON);  delay(80);
     digitalWrite(OUTPUT_PIN, RELAY_OFF); delay(80);
   }
 #elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_TONE
   for (int i = 0; i < 3; i++) {
-    tone(OUTPUT_PIN, 2000, 80); delay(160);
+    tone(OUTPUT_PIN, 2000, 80);
+    delay(160);
   }
 #else
   for (int i = 0; i < 3; i++) {
@@ -302,13 +300,14 @@ void enterPairingMode() {
 void exitPairingMode() {
   pairingMode = false;
   DBGLN("[PAIR] Pairing mode CLOSED");
-<<<<<<< HEAD
+
   // 1 long click/beep = closed
 #if OUTPUT_MODE == OUTPUT_MODE_RELAY
   digitalWrite(OUTPUT_PIN, RELAY_ON);  delay(300);
   digitalWrite(OUTPUT_PIN, RELAY_OFF);
 #elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_TONE
-  tone(OUTPUT_PIN, 1500, 300); delay(350);
+  tone(OUTPUT_PIN, 1500, 300);
+  delay(350);
 #else
   digitalWrite(OUTPUT_PIN, HIGH); delay(300);
   digitalWrite(OUTPUT_PIN, LOW);
@@ -325,29 +324,19 @@ void triggerOutput() {
 #if OUTPUT_MODE == OUTPUT_MODE_RELAY
   digitalWrite(OUTPUT_PIN, RELAY_ON);
   DBGLN("[OUT] Relay energized");
-
 #elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_TONE
-  // Ding-dong rhythm — two descending tones
-  // "Ding": higher note
   tone(OUTPUT_PIN, NOTE_DING, TONE_MS);
   delay(TONE_MS + 80);
   noTone(OUTPUT_PIN);
   delay(100);
-  // "Dong": lower note
   tone(OUTPUT_PIN, NOTE_DONG, TONE_MS);
   delay(TONE_MS + 80);
   noTone(OUTPUT_PIN);
   DBGLN("[OUT] Ding-dong played");
-
 #elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_SIMPLE
   digitalWrite(OUTPUT_PIN, HIGH);
   DBGLN("[OUT] Buzzer on");
 #endif
-=======
-  // 1 long beep = closed
-  digitalWrite(BUZZER_PIN, HIGH); delay(300);
-  digitalWrite(BUZZER_PIN, LOW);
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
 }
 
 // ---- ESP-NOW receive callback -----------------------------
@@ -407,11 +396,7 @@ void onReceive(uint8_t *mac, uint8_t *data, uint8_t len) {
   DBGF("[RING] *** DING DONG *** remote=0x%08X | counter=%u | slot=%d\n",
     pkt->sender, pkt->counter, idx);
 
-<<<<<<< HEAD
   triggerOutput();
-=======
-  digitalWrite(BUZZER_PIN, HIGH);
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
   ringing   = true;
   ringStart = millis();
 
@@ -441,11 +426,7 @@ void setup() {
   DBGF("  Flash size: %u bytes\n", ESP.getFlashChipSize());
   DBGLN("-----------------------------");
 
-<<<<<<< HEAD
-  pinMode(OUTPUT_PIN,      OUTPUT);
-=======
-  pinMode(BUZZER_PIN,      OUTPUT);
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
+  pinMode(OUTPUT_PIN, OUTPUT);
   pinMode(PAIRING_BTN_PIN, INPUT_PULLUP);
   // Set safe idle state immediately on boot — before any other code runs.
   // Relay: HIGH = released (idle). Buzzer: LOW = off.
@@ -490,21 +471,8 @@ void setup() {
       addRemotePeer(remotes[i].mac);
       peersAdded++;
     }
-<<<<<<< HEAD
-=======
   }
-  DBGF("[PEER] %d peer(s) registered from EEPROM\n", peersAdded);
 
-  DBGLN("\n[READY] Listening for remotes");
-  DBGLN("  D2 button = enter pairing mode (10s window)");
-  DBGLN("=============================\n");
-
-  // 2 short beeps = ready
-  for (int i = 0; i < 2; i++) {
-    digitalWrite(BUZZER_PIN, HIGH); delay(100);
-    digitalWrite(BUZZER_PIN, LOW);  delay(100);
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
-  }
   DBGF("[PEER] %d peer(s) registered from EEPROM\n", peersAdded);
 
   DBGLN("\n[READY] Listening for remotes");
@@ -538,11 +506,7 @@ void loop() {
 #endif
     // BUZZER_TONE completes synchronously in triggerOutput() — nothing to do here
     ringing = false;
-<<<<<<< HEAD
     DBGLN("[RING]  Output off");
-=======
-    DBGLN("[RING]  Buzzer off");
->>>>>>> 7d5780c (platform.ini - conf to duild ESP-01 also as a recever module)
   }
 
   // --- Pairing button (debounced, active LOW) ---
