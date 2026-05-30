@@ -34,7 +34,7 @@ extern "C" {
 // PLAINTEXT_DEBUG 1 = skip AES entirely, expect raw packets.
 // MUST match the same value in remote_main.cpp.
 // MUST be 0 for production deployment.
-#define PLAINTEXT_DEBUG 0
+#define PLAINTEXT_DEBUG 1
 
 // ---- Output mode ------------------------------------------
 // Choose ONE output mode. Comment out the others.
