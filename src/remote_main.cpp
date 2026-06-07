@@ -68,7 +68,8 @@ extern "C" {
 #define ACK_TIMEOUT_MS   200   // ms to wait for ACK per attempt
 #define RETRY_BACKOFF_MS 50    // ms between retries
 
-// Receiver MAC (Mine was:- 68:c6:3a:d6:59:48 )— paste the 6 bytes from receiver serial monitor here
+// Receiver MAC (Mine was:- 68:c6:3a:d6:59:48 )— 
+// paste the 6 bytes from receiver serial monitor here
 uint8_t receiverMac[] = {0x68, 0xc6, 0x3a, 0xd6, 0x59, 0x48};
 
 // AES-128 shared key — 16 bytes, MUST match receiver exactly
