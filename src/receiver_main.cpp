@@ -55,7 +55,7 @@ extern "C" {
 #define OUTPUT_MODE_BUZZER_TONE   2
 #define OUTPUT_MODE_BUZZER_SIMPLE 3
 
-#define OUTPUT_MODE  OUTPUT_MODE_RELAY    // ← change this line to switch mode
+#define OUTPUT_MODE  OUTPUT_MODE_BUZZER_TONE    // ← change this line to switch mode
 
 // ---- Configuration ----------------------------------------
 #define CHANNEL          1
