@@ -130,4 +130,6 @@ docs/
 
 ## License
 
-This project is provided as-is. Use at your own discretion.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+You are free to use, modify, and distribute this project with proper attribution.
