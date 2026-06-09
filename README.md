@@ -2,24 +2,32 @@
 
 A **wireless doorbell system** using ESP8266 microcontrollers (NodeMCU/ESP-01) with **AES-128 encrypted** ESP-NOW communication.
 
+## ⭐ Highlights
+
+- **🚀 ESP-NOW Protocol**: Lightweight, mesh-capable wireless communication—no WiFi router needed!
+- **💡 Optimized for Tiny Hardware**: Fully functional on **ESP-01 & ESP8266 with only 512KB flash**
+- **🔧 Customized Implementation**: Tailored ESP-NOW stack for resource-constrained devices
+- **🛡️ Secure Communication**: AES-128 ECB encryption + rolling counter replay protection
+
 ## Features
 
 - 🔐 **Secure**: AES-128 ECB encryption for all messages
-- 📡 **Wireless**: ESP-NOW protocol (no WiFi network required)
+- 📡 **Wireless**: **ESP-NOW protocol** (no WiFi network required)
 - 🔘 **Multi-remote**: Support up to 8 paired remote transmitters
 - 🔧 **Flexible output**: Relay, buzzer (ding-dong), or simple buzzer modes
 - 🪫 **Low power**: Remote sleeps at ~20µA, wakes on button press
 - 💾 **Persistent**: Stores paired remotes in EEPROM
 - 🛡️ **Replay protection**: Rolling counter prevents duplicate rings
+- **💾 Minimal Footprint**: Works on ESP-01 with just **512KB flash**
 
 ## Hardware
 
 ### Receiver (Required)
 - **ESP-12E/F** (NodeMCU v2/v3, Lolin, D1 Mini) — **Recommended** (4MB flash)
-- OR **ESP-01** (512KB flash) — Fallback option
+- **OR ESP-01** (512KB flash) — **Fully supported** on tiny devices ⚡
 
 ### Remote (Required)
-- **ESP-01** (512KB flash) — Battery-powered transmitter
+- **ESP-01** (512KB flash) — Battery-powered transmitter 🔋
 
 ## Quick Start
 
@@ -27,7 +35,7 @@ A **wireless doorbell system** using ESP8266 microcontrollers (NodeMCU/ESP-01) w
    ```bash
    pio run -e receiver_12e -t upload   # NodeMCU/ESP-12E
    # or
-   pio run -e receiver_01 -t upload    # Bare ESP-01
+   pio run -e receiver_01 -t upload    # Bare ESP-01 (512KB flash)
    ```
 
 2. **Get receiver's MAC address** from serial monitor output
