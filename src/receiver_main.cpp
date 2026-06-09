@@ -55,7 +55,7 @@ extern "C" {
 #define OUTPUT_MODE_BUZZER_TONE   2
 #define OUTPUT_MODE_BUZZER_SIMPLE 3
 
-#define OUTPUT_MODE  OUTPUT_MODE_BUZZER_TONE    // ← change this line to switch mode
+#define OUTPUT_MODE  OUTPUT_MODE_RELAY   // ← change this line to switch mode
 
 // ---- Configuration ----------------------------------------
 #define CHANNEL          1
@@ -67,15 +67,21 @@ extern "C" {
 #define PAIRING_BTN_PIN  D2        // Active LOW — INPUT_PULLUP, button to GND
 #endif
                                    // ESP-01 receiver: change to 0 (GPIO0, careful)
-#define RING_DURATION    3000      // ms relay held / buzzer on (was 5000)
+#define RING_DURATION    5000      // ms relay held / buzzer on (was 5000)
 #define MAX_REMOTES      8
 #define PAIRING_WINDOW   10000
 
-// Relay polarity: LOW = energized (ring), HIGH = released (idle)
-// Standard relay modules are active-LOW — this is correct for those.
-// If your relay is active-HIGH, swap RELAY_ON/RELAY_OFF.
-#define RELAY_ON   LOW
-#define RELAY_OFF  HIGH
+// Relay polarity: set to 1 for active-HIGH relays, 0 for standard active-LOW modules.
+// Active-HIGH:      HIGH = energized, LOW = released.
+// Active-LOW:       LOW  = energized, HIGH = released.
+#define RELAY_ACTIVE_HIGH 1
+#if RELAY_ACTIVE_HIGH
+  #define RELAY_ON   HIGH
+  #define RELAY_OFF  LOW
+#else
+  #define RELAY_ON   LOW
+  #define RELAY_OFF  HIGH
+#endif
 
 // Buzzer tone frequencies for ding-dong pattern (passive buzzer only)
 #define NOTE_DING  1047   // C6
@@ -511,13 +517,16 @@ void loop() {
 
   // --- Pairing button (debounced, active LOW) ---
   static unsigned long lastBtnTime = 0;
-  if (digitalRead(PAIRING_BTN_PIN) == LOW) {
+  static bool lastBtnPressed = false;
+  bool btnPressed = (digitalRead(PAIRING_BTN_PIN) == LOW);
+  if (btnPressed && !lastBtnPressed) {
     unsigned long now = millis();
     if (now - lastBtnTime > 300) {
       lastBtnTime = now;
       pairingMode ? exitPairingMode() : enterPairingMode();
     }
   }
+  lastBtnPressed = btnPressed;
 
   // --- Pairing auto-expire ---
   if (pairingMode && (millis() - pairingStart > PAIRING_WINDOW)) {
