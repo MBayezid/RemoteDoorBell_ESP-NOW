@@ -20,6 +20,26 @@ A **wireless doorbell system** using ESP8266 microcontrollers (NodeMCU/ESP-01) w
 - 🛡️ **Replay protection**: Rolling counter prevents duplicate rings
 - **💾 Minimal Footprint**: Works on ESP-01 with just **512KB flash**
 
+## System Overview
+
+This project is split into two firmware roles:
+
+- **Receiver** (`src/receiver_main.cpp`) — listens for encrypted ESP-NOW ring packets, stores paired remotes, validates the rolling counter, triggers a relay or buzzer, and sends an ACK back to the remote.
+- **Remote** (`src/remote_main.cpp`) — boots on button press, sends a single encrypted ring packet, waits for an ACK from the receiver, and then deep sleeps to preserve battery.
+
+### Message flow
+
+1. Remote boots on button press and loads the counter from EEPROM.
+2. Remote encrypts a 16-byte `RING` packet and sends it over ESP-NOW to the receiver.
+3. Receiver decrypts the packet, verifies the packet type and sender, checks the rolling counter, triggers the selected output, then sends an `ACK` back to the remote.
+4. Remote receives the `ACK` and indicates success with the LED before deep sleep.
+
+### Important configuration notes
+
+- `PLAINTEXT_DEBUG` must match in both `src/receiver_main.cpp` and `src/remote_main.cpp`.
+- `RELAY_ACTIVE_HIGH` in `src/receiver_main.cpp` selects relay polarity when `OUTPUT_MODE` is `RELAY`.
+- `receiverMac[]` in `src/remote_main.cpp` must be updated to the receiver’s MAC address after flashing the receiver.
+
 ## Hardware
 
 ### Receiver (Required)
@@ -61,8 +81,8 @@ Edit values in firmware source files:
 
 | Setting | File | Default | Notes |
 |---------|------|---------|-------|
-| Output mode | `receiver_main.cpp` line 58 | `BUZZER_TONE` | `RELAY`, `BUZZER_TONE`, or `BUZZER_SIMPLE` |
-| Ring duration | `receiver_main.cpp` line 70 | 3000 ms | How long relay/buzzer stays active |
+| Output mode | `src/receiver_main.cpp` | `BUZZER_TONE` | `RELAY`, `BUZZER_TONE`, or `BUZZER_SIMPLE`; set `RELAY_ACTIVE_HIGH` for active-HIGH relays |
+| Ring duration | `src/receiver_main.cpp` | 3000 ms | How long relay/buzzer stays active |
 | Pairing window | `receiver_main.cpp` line 72 | 10000 ms | Duration of pairing mode |
 | Max remotes | `receiver_main.cpp` line 71 | 8 | Maximum paired transmitters |
 | AES key | Both files, line ~87 | Default (insecure) | **Change before production** |
