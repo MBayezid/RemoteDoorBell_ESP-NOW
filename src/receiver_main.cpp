@@ -67,7 +67,7 @@ extern "C" {
 #define PAIRING_BTN_PIN  D2        // Active LOW — INPUT_PULLUP, button to GND
 #endif
                                    // ESP-01 receiver: change to 0 (GPIO0, careful)
-#define RING_DURATION    2000      // ms relay held / buzzer on (changed to 2 sec)
+#define RING_DURATION    1000      // ms relay held / buzzer on (changed to 1 sec)
 #define MAX_REMOTES      8
 #define PAIRING_WINDOW   10000
 
