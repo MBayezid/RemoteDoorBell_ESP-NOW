@@ -1,4 +1,4 @@
-# RemoteDoorBell
+# RemoteDoorBell (ESP_NOW + AES-128)
 
 A **wireless doorbell system** using ESP8266 microcontrollers (NodeMCU/ESP-01) with **AES-128 encrypted** ESP-NOW communication.
 
