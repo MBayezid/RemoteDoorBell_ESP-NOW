@@ -60,7 +60,7 @@ extern "C" {
 #define OUTPUT_MODE  OUTPUT_MODE_RELAY   // ← change this line to switch mode
 
 // ---- Configuration ----------------------------------------
-#define CHANNEL          1
+#define CHANNEL          2         // ESP-NOW channel (must match remote's WiFi channel)
 #ifndef OUTPUT_PIN
 #define OUTPUT_PIN       D5        // Relay signal pin or buzzer pin
 #endif

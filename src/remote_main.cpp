@@ -63,7 +63,7 @@ extern "C" {
 #define LED_PIN       2     // GPIO2
 
 // ---- Configuration ----------------------------------------
-#define CHANNEL          1
+#define CHANNEL          2         // ESP-NOW channel (must match receiver's WiFi channel)
 #define MAX_RETRIES      2
 #define ACK_TIMEOUT_MS   200   // ms to wait for ACK per attempt
 #define RETRY_BACKOFF_MS 50    // ms between retries
