@@ -50,10 +50,24 @@ RING packets and ACK packets share the same structure. The receiver echoes the s
 
 ### Relay polarity
 
-The receiver now supports explicit relay polarity selection using `RELAY_ACTIVE_HIGH` in `src/receiver_main.cpp`.
+The receiver supports explicit relay polarity selection via `RELAY_ACTIVE_HIGH` in `src/receiver_main.cpp`.
 
-- `RELAY_ACTIVE_HIGH = 0` (default for standard active-LOW relay modules)
-- `RELAY_ACTIVE_HIGH = 1` for active-HIGH relay modules
+- `RELAY_ACTIVE_HIGH = 0` **(default)** — standard active-LOW modules (SRD-05VDC, HY-SRD).
+  LOW energizes the coil; HIGH releases it. The module's onboard optocoupler pull-up holds IN HIGH
+  during the ESP boot window, so the relay cannot fire before firmware initialises the GPIO.
+- `RELAY_ACTIVE_HIGH = 1` — active-HIGH relay modules (uncommon).
+
+### Boot-time output safety
+
+The output pin is initialised at the very top of `setup()`, before Serial, WiFi, or any other
+call that could delay execution. The order is `digitalWrite(RELAY_OFF)` → `pinMode(OUTPUT)`,
+not the reverse. This pre-loads the ESP8266 output latch with the safe idle level before the
+push-pull driver is enabled, preventing a glitch pulse on the relay coil.
+
+The boot-ready "two clicks" signal has been removed for `OUTPUT_MODE_RELAY`. Pulsing the relay
+at the end of `setup()` was the primary cause of the doorbell ringing 2–3 times on every
+power-up. Buzzer modes retain the two-tone ready signal. Pairing-mode entry/exit clicks are
+unaffected.
 
 ## Remote behavior
 

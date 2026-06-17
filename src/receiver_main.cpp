@@ -39,14 +39,16 @@ extern "C" {
 // ---- Output mode ------------------------------------------
 // Choose ONE output mode. Comment out the others.
 //
-// RELAY        — Active-LOW relay module (common doorbell wiring)
-//                Pin LOW = relay energized = bell rings.
-//                Pin HIGH = relay released = idle (safe default on boot).
-//                Duration: RING_DURATION ms then releases automatically.
+// RELAY         — Active-LOW relay module (standard SRD-05VDC / HY-SRD wiring).
+//                 Pin LOW  = relay coil energized  = bell rings.
+//                 Pin HIGH = relay coil released   = idle (safe on boot).
+//                 The relay module's own pull-up holds IN HIGH during the ESP
+//                 boot window before our code runs — relay stays off.
+//                 Duration: RING_DURATION ms then releases automatically.
 //
-// BUZZER_TONE  — Passive piezo buzzer with ding-dong rhythm pattern.
-//                Plays a two-tone doorbell sequence using tone().
-//                Requires a passive buzzer (not self-oscillating active buzzer).
+// BUZZER_TONE   — Passive piezo buzzer with ding-dong rhythm pattern.
+//                 Plays a two-tone doorbell sequence using tone().
+//                 Requires a passive buzzer (not self-oscillating active buzzer).
 //
 // BUZZER_SIMPLE — Active buzzer or passive with simple on/off.
 //                 Pin HIGH = buzzer on. Duration: RING_DURATION ms.
@@ -71,10 +73,18 @@ extern "C" {
 #define MAX_REMOTES      8
 #define PAIRING_WINDOW   10000
 
-// Relay polarity: set to 1 for active-HIGH relays, 0 for standard active-LOW modules.
-// Active-HIGH:      HIGH = energized, LOW = released.
-// Active-LOW:       LOW  = energized, HIGH = released.
-#define RELAY_ACTIVE_HIGH 1
+// Relay polarity — match to your relay module:
+//   0 = Active-LOW  (default — standard SRD-05VDC, HY-SRD, most cheap modules)
+//         LOW  = coil energized (bell rings)
+//         HIGH = coil released  (idle, safe boot state)
+//   1 = Active-HIGH (uncommon — use only if your module fires on HIGH)
+//         HIGH = coil energized (bell rings)
+//         LOW  = coil released  (idle)
+//
+// Active-LOW modules have an onboard optocoupler and pull-up on IN.
+// That pull-up holds the relay OFF during the ESP boot window before
+// our GPIO driver is enabled — no accidental ring on power-up.
+#define RELAY_ACTIVE_HIGH 0
 #if RELAY_ACTIVE_HIGH
   #define RELAY_ON   HIGH
   #define RELAY_OFF  LOW
@@ -411,7 +421,32 @@ void onReceive(uint8_t *mac, uint8_t *data, uint8_t len) {
 
 // ---- Entry points -----------------------------------------
 void setup() {
-  // Serial.begin MUST be first.
+  // ── OUTPUT PIN — safe state before the driver is enabled ────────────
+  // Rule: always call digitalWrite() BEFORE pinMode(OUTPUT).
+  //
+  // On ESP8266, calling pinMode(OUTPUT) enables the push-pull driver
+  // immediately using whatever value the output latch currently holds.
+  // The reset-default latch value on GPIO14 (D5) is LOW.  With
+  // active-LOW relay (RELAY_OFF = HIGH) that LOW would fire the relay
+  // for a few microseconds — enough to click a mechanical relay coil
+  // and, if the bell circuit is sensitive, ring the chime.
+  //
+  // Calling digitalWrite(RELAY_OFF) first writes HIGH into the latch
+  // while the pin is still an input (no current flows).  When
+  // pinMode(OUTPUT) then enables the driver it comes up at HIGH =
+  // RELAY_OFF from the very first clock cycle — zero-width glitch.
+  //
+  // This MUST be the first thing in setup(), before Serial, WiFi,
+  // or any other initialisation that takes time.
+#if OUTPUT_MODE == OUTPUT_MODE_RELAY
+  digitalWrite(OUTPUT_PIN, RELAY_OFF);   // pre-load latch: relay released (HIGH)
+#else
+  digitalWrite(OUTPUT_PIN, LOW);         // pre-load latch: buzzer/LED off
+#endif
+  pinMode(OUTPUT_PIN, OUTPUT);           // enable driver — already at safe level
+  pinMode(PAIRING_BTN_PIN, INPUT_PULLUP);
+
+  // ── Serial ──────────────────────────────────────────────────────────
   // 74880 baud captures both the ESP8266 boot ROM output AND
   // your application prints in a single clean stream.
   // Your PlatformIO monitor_speed must match this value.
@@ -431,16 +466,6 @@ void setup() {
   DBGF("  Free heap : %u bytes\n", ESP.getFreeHeap());
   DBGF("  Flash size: %u bytes\n", ESP.getFlashChipSize());
   DBGLN("-----------------------------");
-
-  pinMode(OUTPUT_PIN, OUTPUT);
-  pinMode(PAIRING_BTN_PIN, INPUT_PULLUP);
-  // Set safe idle state immediately on boot — before any other code runs.
-  // Relay: HIGH = released (idle). Buzzer: LOW = off.
-#if OUTPUT_MODE == OUTPUT_MODE_RELAY
-  digitalWrite(OUTPUT_PIN, RELAY_OFF);  // relay released on boot
-#else
-  digitalWrite(OUTPUT_PIN, LOW);
-#endif
 
   AES_init_ctx(&aesCtx, AES_KEY);
   DBGLN("[AES]   Key schedule expanded OK");
@@ -485,16 +510,17 @@ void setup() {
   DBGLN("  D2 button = enter pairing mode (10s window)");
   DBGLN("=============================\n");
 
-  // 2 short clicks/beeps = ready
-#if OUTPUT_MODE == OUTPUT_MODE_RELAY
-  for (int i = 0; i < 2; i++) {
-    digitalWrite(OUTPUT_PIN, RELAY_ON);  delay(100);
-    digitalWrite(OUTPUT_PIN, RELAY_OFF); delay(100);
-  }
-#elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_TONE
+  // Boot-ready audio feedback — buzzer modes only.
+  //
+  // Relay mode deliberately has NO boot-ready signal.
+  // Pulsing the relay here would ring the doorbell chime on every
+  // power-up or reset — exactly the "2-3 rings on boot" symptom.
+  // The serial log above is the boot confirmation for relay builds.
+  // Pairing-mode entry/exit still produce relay clicks as intended.
+#if OUTPUT_MODE == OUTPUT_MODE_BUZZER_TONE
   tone(OUTPUT_PIN, 1000, 100); delay(200);
   tone(OUTPUT_PIN, 1000, 100); delay(200);
-#else
+#elif OUTPUT_MODE == OUTPUT_MODE_BUZZER_SIMPLE
   for (int i = 0; i < 2; i++) {
     digitalWrite(OUTPUT_PIN, HIGH); delay(100);
     digitalWrite(OUTPUT_PIN, LOW);  delay(100);
