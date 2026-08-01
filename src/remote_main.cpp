@@ -11,21 +11,19 @@ extern "C" {
 }
 
 // ---- Debug mode -------------------------------------------
-// PLAINTEXT_DEBUG 1 = skip AES entirely, send raw packets (Dev mode)
-// PLAINTEXT_DEBUG 0 = use AES encryption (PRODUCTION MODE)
 #define PLAINTEXT_DEBUG 1
 
 // ---- Pin definitions --------------------------------------
 #define LED_PIN       2     // GPIO2 (Active LOW on ESP-01)
 
 // ---- Configuration ----------------------------------------
-#define CHANNEL       2     // ESP-NOW channel (MUST match receiver)
-#define TX_RETRIES    3     // Send 3 times back-to-back to ensure delivery
+#define CHANNEL       2     
+#define TX_RETRIES    3     
 
 // ⚠️ UPDATE THIS: Paste the MAC address from your receiver's serial monitor
 uint8_t receiverMac[] = {0x68, 0xc6, 0x3a, 0xd6, 0x59, 0x48};
 
-// AES-128 shared key — 16 bytes, MUST match receiver exactly
+// AES-128 shared key
 static const uint8_t AES_KEY[AES_KEYLEN] = {
   0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
   0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c
@@ -75,8 +73,8 @@ void loadCounter() {
 void saveCounter(uint32_t val) {
   EEPROM.put(EEPROM_COUNTER, val);
   EEPROM.commit();
-  // CRITICAL: Wait for EEPROM write to finish before power might be cut by the button
-  delay(50); 
+  // CRITICAL: Wait for flash write to complete
+  delay(100); // Increased to 100ms for maximum safety on older flash chips
 }
 
 // ---- Main -------------------------------------------------
@@ -89,10 +87,18 @@ void setup() {
   AES_init_ctx(&aesCtx, AES_KEY);
   loadCounter();
 
+  // ✅ CRITICAL FIX: Increment and save the counter IMMEDIATELY.
+  // By doing this BEFORE WiFi initialization and transmission, we ensure
+  // the EEPROM write completes as early as possible in the boot sequence.
+  // This drastically reduces the chance of a "desync" if the user releases
+  // the power button too quickly.
+  messageCounter++;
+  saveCounter(messageCounter);
+
   // Quick LED pulse to show the chip booted
   ledOn(); delay(50); ledOff();
 
-  // 3. Build packet
+  // 3. Build packet using the ALREADY INCREMENTED counter
   Packet pkt;
   memset(&pkt, 0, sizeof(pkt));
   pkt.type    = 1;
@@ -111,7 +117,7 @@ void setup() {
   WiFi.setOutputPower(20.5);
 
   if (esp_now_init() != 0) {
-    saveCounter(messageCounter + 1);
+    // Radio failed. Counter is already safely incremented.
     ESP.deepSleep(0);
     return;
   }
@@ -120,19 +126,15 @@ void setup() {
   esp_now_add_peer(receiverMac, ESP_NOW_ROLE_COMBO, CHANNEL, NULL, 0);
 
   // 5. Fire-and-forget transmission
-  // Send multiple times back-to-back to overcome RF collisions without waiting for ACK
   for (int i = 0; i < TX_RETRIES; i++) {
     esp_now_send(receiverMac, wire.data, sizeof(wire));
-    delay(30); // Small delay prevents the PHY layer from dropping consecutive packets
+    delay(30); 
   }
 
-  // 6. Save counter and sleep
-  saveCounter(messageCounter + 1);
-  
-  // Deep sleep (harmless if power is already cut by the button, but good practice)
+  // 6. Sleep (Counter was already saved at the beginning)
   ESP.deepSleep(0);
 }
 
 void loop() {
-  // Never reached — all logic completes in setup()
+  // Never reached
 }
