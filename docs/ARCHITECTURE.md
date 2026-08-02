@@ -1,126 +1,83 @@
+
+---
+
+### 2. `docs/ARCHITECTURE.md`
+
+```markdown
 # RemoteDoorBell Architecture
 
 ## Overview
+This project consists of two ESP8266 roles communicating via a **Fire-and-Forget** UDP-like paradigm over ESP-NOW. 
+* **Receiver (`src/receiver_main.cpp`)**: Continuously listens for encrypted ring packets, validates them, suppresses duplicates, and triggers a relay or buzzer.
+* **Remote (`src/remote_main.cpp`)**: Powered directly via a physical push-button on the VCC line. Boots, increments its rolling counter, blasts redundant packets, and powers off.
 
-This project consists of two ESP8266 roles:
+The communication path uses ESP-NOW with a shared AES-128 key and a rolling counter for replay protection. No ACK handshakes are used, ensuring ultra-low latency and allowing the remote to power down instantly.
 
-- **Receiver** (`src/receiver_main.cpp`): receives encrypted ring packets, validates them, triggers a relay or buzzer, and sends an ACK.
-- **Remote** (`src/remote_main.cpp`): boots on button press, sends a ring packet, waits for an ACK, then deep sleeps to conserve battery.
+## Packet Structure
+Each packet is exactly 16 bytes (matching the AES-128 block size):
+* `uint8_t type` — `1` for RING (Type 2 is reserved/unused).
+* `uint32_t sender` — sender chip ID.
+* `uint32_t counter` — rolling counter.
+* `uint8_t pad[7]` — padding for AES block size.
 
-The communication path uses ESP-NOW with a shared AES-128 key and a rolling counter for replay protection.
+## Receiver Behavior
+1. Initialize output pin to a safe idle state *before* enabling the GPIO driver (prevents boot glitches).
+2. Configure pairing button, AES context, EEPROM, and ESP-NOW.
+3. Register persisted remote peers from EEPROM.
+4. Listen for incoming ESP-NOW packets.
 
-## Packet structure
+### `onReceive()` Callback
+1. Reject packets of unexpected length.
+2. **Memory Alignment Fix**: Use `memcpy` to safely copy the decrypted byte array into a `Packet` struct. (Direct pointer casting causes ESP8266 `Exception 9` LoadStoreAlignmentCause crashes).
+3. Decrypt packet (unless `PLAINTEXT_DEBUG == 1`).
+4. Ignore non-RING packets.
+5. If sender is unknown and pairing is enabled, register the remote.
+6. Calculate `delta = packet.counter - remotes[idx].lastCounter`.
+7. Suppress exact duplicates (`delta == 0`) and suspicious rollbacks (`delta > 0xF0000000`).
+8. Trigger the output and set `ringing = true`.
+9. Return immediately (No ACK sent).
 
-Each packet is exactly 16 bytes:
-
-- `uint8_t type` — `1` for RING, `2` for ACK
-- `uint32_t sender` — sender chip ID
-- `uint32_t counter` — rolling counter
-- `uint8_t pad[7]` — padding for AES block size
-
-RING packets and ACK packets share the same structure. The receiver echoes the sender ID in its ACK.
-
-## Receiver behavior
-
-1. Initialize serial/debug output.
-2. Configure output pin and pairing button.
-3. Set initial output idle state:
-   - Relay: `RELAY_OFF`
-   - Buzzer: `LOW`
-4. Initialize AES context, EEPROM, and ESP-NOW.
-5. Register persisted remote peers so ACKs can be sent.
-6. Listen for incoming ESP-NOW packets.
-
-### onReceive()
-
-- Reject packets of unexpected length.
-- Decrypt packet unless `PLAINTEXT_DEBUG == 1`.
-- Ignore non-`RING` packets.
-- If sender is unknown and pairing is enabled, register the remote.
-- Calculate `delta = packet.counter - remotes[idx].lastCounter`.
-- Suppress duplicates and suspicious rollback attempts.
-- Trigger the output and set `ringing = true`.
-- Send an ACK back to the remote.
-
-### Output logic
-
-- `OUTPUT_MODE_RELAY` energizes the relay with `RELAY_ON` and releases it after `RING_DURATION`.
-- `OUTPUT_MODE_BUZZER_TONE` plays a ding-dong sequence synchronously.
-- `OUTPUT_MODE_BUZZER_SIMPLE` turns the buzzer on for `RING_DURATION` and then off.
-
-### Relay polarity
-
-The receiver supports explicit relay polarity selection via `RELAY_ACTIVE_HIGH` in `src/receiver_main.cpp`.
-
-- `RELAY_ACTIVE_HIGH = 0` **(default)** — standard active-LOW modules (SRD-05VDC, HY-SRD).
-  LOW energizes the coil; HIGH releases it. The module's onboard optocoupler pull-up holds IN HIGH
-  during the ESP boot window, so the relay cannot fire before firmware initialises the GPIO.
-- `RELAY_ACTIVE_HIGH = 1` — active-HIGH relay modules (uncommon).
-
-### Boot-time output safety
-
-The output pin is initialised at the very top of `setup()`, before Serial, WiFi, or any other
-call that could delay execution. The order is `digitalWrite(RELAY_OFF)` → `pinMode(OUTPUT)`,
-not the reverse. This pre-loads the ESP8266 output latch with the safe idle level before the
-push-pull driver is enabled, preventing a glitch pulse on the relay coil.
-
-The boot-ready "two clicks" signal has been removed for `OUTPUT_MODE_RELAY`. Pulsing the relay
-at the end of `setup()` was the primary cause of the doorbell ringing 2–3 times on every
-power-up. Buzzer modes retain the two-tone ready signal. Pairing-mode entry/exit clicks are
-unaffected.
-
-## Remote behavior
-
-1. Configure GPIO2 as an LED indicator.
-2. Initialize AES and EEPROM.
-3. Load the last saved counter from EEPROM.
-4. Build a `RING` packet and encrypt it unless `PLAINTEXT_DEBUG == 1`.
+## Remote Behavior
+1. Power is applied via the VCC push-button.
+2. Configure GPIO2 (LED) and initialize AES/EEPROM.
+3. **Increment Early Strategy**: Load the counter, increment it, and save it to EEPROM *immediately* (with a 50ms delay to ensure flash completion). This prevents desync if the user releases the button before TX completes.
+4. Build a `RING` packet and encrypt it.
 5. Initialize ESP-NOW and add the receiver peer.
-6. Send the packet with retries, waiting for an ACK each time.
-7. Blink the LED for success/failure.
-8. Save the counter and deep sleep.
+6. Fire-and-Forget: Send the packet 3 times back-to-back with a 30ms delay to overcome RF collisions without waiting for ACKs.
+7. Enter deep sleep (or simply lose power when the button is released).
 
-### Power and wake strategy
+## Power and Wake Strategy
+The remote uses an ESP-01 with a push-button wired in series with the main **VCC power line**. 
+* **Idle Current**: True 0µA (physically disconnected).
+* **Active Time**: ~150ms per press.
+* **Hardware Mitigation**: Because the ESP8266 requires time to boot and write to EEPROM, a **100µF to 470µF capacitor** across VCC and GND is highly recommended. This acts as a temporary battery, keeping the chip alive long enough to finish the `EEPROM.commit()` if the user releases the button too quickly.
 
-The remote uses an ESP-01 with the button wired to `RST`.
-Each button press causes a hard reset, sending one ring packet and then entering deep sleep.
-This strategy minimizes idle current.
-
-## Hardware wiring notes
+## Hardware Wiring Notes
 
 ### Receiver
-
-- NodeMCU / ESP-12E: use `D5` for `OUTPUT_PIN`, `D2` for pairing button.
-- ESP-01 receiver: use `GPIO2` for `OUTPUT_PIN`, `GPIO0` for pairing button.
+* **NodeMCU / ESP-12E**: `D5` for `OUTPUT_PIN`, `D2` for pairing button.
+* **ESP-01 receiver**: `GPIO2` for `OUTPUT_PIN`, `GPIO0` for pairing button.
 
 ### Remote
+* **VCC**: Push-button to Power Source (e.g., CR2032 or LiPo).
+* **Capacitor**: 100µF+ across VCC and GND.
+* **GPIO0**: 10K pull-up to VCC (prevents bootloader mode).
+* **GPIO2**: Status LED (active LOW).
 
-- RST ↔ button ↔ GND
-- Use a 10K pull-up on RST to VCC.
-- GPIO0 must remain pulled up or floating to avoid bootloader mode.
-- GPIO2 is used for an active-LOW status LED.
-
-## Suggested improvements
+## Suggested Improvements
 
 ### Software
-
-- Move from blocking `delay()` patterns to a non-blocking state machine for pairing and tone output.
-- Add remote management commands in the receiver to remove or re-register remotes.
-- Check `esp_now_add_peer()` return values and recover on peer registration failure.
-- Consider stronger authentication than AES-ECB if the protocol evolves, e.g. AES-GCM or HMAC.
-- Add a build-time or runtime configuration option for the receiver MAC rather than hardcoding it in `remote_main.cpp`.
+* Move from blocking `delay()` patterns to a non-blocking state machine for pairing and tone output in the receiver.
+* Add remote management commands in the receiver to remove or clear the EEPROM whitelist.
+* Consider stronger authentication than AES-ECB if the protocol evolves (e.g., AES-GCM or HMAC).
 
 ### Hardware
+* Use a transistor/driver stage if the relay module requires more current than the ESP GPIO can safely provide.
+* Add a battery voltage monitor to the remote to indicate low-battery conditions via the LED.
 
-- Use a transistor/driver stage if the relay module requires more current than the ESP GPIO can safely provide.
-- Add a small status LED or buzzer to the receiver to indicate pairing and fault conditions.
-- Use proper 3.3V regulation and decoupling capacitors on both boards.
-- For the remote, consider a battery voltage monitor and low-battery indication.
-
-## Quick validation checklist
-
-- Ensure `PLAINTEXT_DEBUG` is `0` in both firmware files for production.
-- Ensure `receiverMac[]` in `src/remote_main.cpp` matches the boot-time receiver MAC.
-- Set `RELAY_ACTIVE_HIGH` correctly for your relay module.
-- Verify the receiver output pin is correct for the board in use.
-- Verify pairing button wiring is active LOW with a pull-up.
+## Quick Validation Checklist
+* [ ] Ensure `PLAINTEXT_DEBUG` is `0` in both firmware files for production.
+* [ ] Ensure `receiverMac[]` in `src/remote_main.cpp` matches the boot-time receiver MAC.
+* [ ] Set `RELAY_ACTIVE_HIGH` correctly for your relay module.
+* [ ] Verify the receiver output pin is correct for the board in use.
+* [ ] Verify a capacitor is installed on the Remote VCC/GND lines.

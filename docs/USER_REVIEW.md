@@ -1,50 +1,44 @@
 # Doorbell ESP-NOW — Review, Architecture & Recommendations
 
-## Logical integrity review
+## Logical Integrity Review
+The project architecture is highly coherent, optimized for a "Fire-and-Forget" paradigm that eliminates handshake latency. The receiver handles packet validation, duplicate suppression, and output triggering. The remote handles boot-triggered transmission, early counter persistence, and immediate power-down.
 
-The project architecture is coherent and the firmware roles are clearly separated.
-The receiver handles pairing, packet validation, duplicate suppression, output triggering, and ACK admission. The remote handles button-triggered transmission, ACK monitoring, counter persistence, and deep sleep.
+## Current Logic Findings
+* **Receiver packet flow is correct & safe**: Decrypt → `memcpy` to aligned struct → validate → find/learn remote → replay suppression → trigger output.
+* **Remote transmission logic is correct**: Boot → Increment & Save Counter → Build Packet → Blast 3x → Sleep/Power-off.
+* **Rolling counter protection** is robust. The `delta` calculation correctly handles 32-bit unsigned integer wrap-arounds and blocks malicious rollbacks.
+* **EEPROM storage** for paired remotes and counter state is adequate and optimized to reduce flash wear.
 
-### Current logic findings
+## Recent Critical Bug Fixes Implemented
 
-- **Receiver packet flow** is correct: decrypt → validate → find/learn remote → replay suppression → trigger output → send ACK.
-- **Remote transmission logic** is correct: build packet → send with retries → wait for ACK → save counter → deep sleep.
-- **Rolling counter protection** is implemented and prevents exact duplicate or rollback-like packets.
-- **EEPROM storage** for paired remotes and counter state is adequate for the intended use.
+### 1. ESP8266 Exception 9 (Memory Alignment Crash)
+* **Issue**: The receiver previously cast a `uint8_t*` byte array directly to a `Packet*` struct pointer. Because the struct contains 32-bit integers, this violated the Xtensa architecture's 4-byte memory alignment requirement, causing random `Exception 9` (LoadStoreAlignmentCause) reboots.
+* **Fix**: Replaced the pointer cast with `memcpy(&pkt, plain, sizeof(pkt));` in `onReceive()` to ensure the data is safely copied into a properly aligned stack variable.
 
-### Important improvements made
+### 2. Power-Button Race Condition (Counter Desync)
+* **Issue**: When the remote was powered via a VCC button, releasing the button too quickly cut power before `EEPROM.commit()` could finish. The remote would fail to save the *next* counter, causing it to send the *old* counter on the next press. The receiver would reject this as a duplicate (`delta=0`).
+* **Fix**: Implemented the **"Increment Early"** strategy. The remote now increments and saves the counter *immediately* upon boot (before WiFi init or TX). Added a `delay(50)` after `EEPROM.commit()` to guarantee the flash write completes.
 
-- Added explicit relay polarity configuration in `src/receiver_main.cpp` with `RELAY_ACTIVE_HIGH`.
-- Improved pairing button debounce in `src/receiver_main.cpp` so mode toggles only on button press transitions.
-- Added documentation clarity around the receiver/remote roles and configuration points.
+### 3. Boot-Time Relay Glitch
+* **Issue**: Standard ESP8266 boot sequences can cause momentary LOW pulses on GPIO pins, accidentally triggering active-LOW relays.
+* **Fix**: The receiver `setup()` explicitly calls `digitalWrite(OUTPUT_PIN, RELAY_OFF)` *before* calling `pinMode(OUTPUT_PIN, OUTPUT)`. This pre-loads the output latch with the safe idle level before the push-pull driver is enabled.
 
-## Hardware / software suggestions
+## Hardware / Software Suggestions
 
-### Hardware recommendations
+### Hardware Recommendations
+* **Remote Capacitor**: A 100µF - 470µF electrolytic capacitor across the Remote's VCC and GND is mandatory for reliable VCC-switching. It provides the necessary hold-up time for the EEPROM write if the user "taps" the button.
+* Use a proper 3.3V regulator (e.g., HT7333 or MCP1700) if running from a LiPo battery.
+* Ensure the pairing button on the receiver uses active-LOW wiring with a strong 10K pull-up.
 
-- Use a proper 3.3V regulator and decoupling capacitors on both ESP8266 boards.
-- For the relay output, use a driver transistor or optocoupler if the relay module does not tolerate direct GPIO switching.
-- Ensure the receiver output pin is matched to the board type:
-  - NodeMCU/ESP-12E: `D5`
-  - ESP-01 receiver: `GPIO2`
-- Keep the pairing button on the receiver using active-LOW wiring with a strong pull-up.
-- Add a small indicator LED or buzzer on the receiver for pairing and fault states.
+### Software Recommendations
+* Set `PLAINTEXT_DEBUG` to `0` in both files for production deployment.
+* Consider making output triggering non-blocking when `OUTPUT_MODE` is `BUZZER_TONE` to prevent Soft WDT resets during the `tone()` delays.
+* Add a "Clear All Remotes" hardware sequence (e.g., holding the pairing button for 10 seconds) to wipe the EEPROM whitelist without needing a serial connection.
 
-### Software recommendations
+## Recommended Docs
+* `README.md` provides a high-level overview, quick-start guide, and packet flow.
+* `docs/ARCHITECTURE.md` describes the system roles, Fire-and-Forget paradigm, wiring, and memory alignment fixes.
+* `docs/USER_REVIEW.md` (this file) serves as the engineering changelog and troubleshooting reference.
 
-- Set `PLAINTEXT_DEBUG` to `0` in both `src/receiver_main.cpp` and `src/remote_main.cpp` for production.
-- Consider adding a remote removal / reset mechanism on the receiver.
-- Consider making output triggering non-blocking when `OUTPUT_MODE` is `BUZZER_TONE` for better responsiveness.
-- Add consistency checks for `esp_now_add_peer()` result values and log failure cases.
-- Replace hardcoded `receiverMac[]` assignment with a simple build-time or config-time value when possible.
-- Consider a stronger message authentication layer beyond AES-ECB if the project evolves.
-
-## Recommended docs
-
-- `README.md` now includes a high-level overview and the packet flow.
-- `docs/ARCHITECTURE.md` describes the system roles, wiring, and improvement suggestions.
-- Keep `docs/USER_REVIEW.md` as a quick troubleshooting and validation reference.
-
-## Build verification
-
-The build settings and binary paths are valid for the supported environments. The next step is field validation with the intended hardware and actual receiver MAC values.
+## Build Verification
+The PlatformIO build settings (`platformio.ini`) and binary paths are valid for the supported environments (NodeMCU v2/v3, D1 Mini, and bare ESP-01). Flash layouts correctly utilize `eagle.flash.512k64.ld` for the 512KB ESP-01 constraints.
