@@ -456,7 +456,7 @@ pinMode(OUTPUT_PIN, OUTPUT);          // ← then enable the driver
 ## 📁 Project File Map
 
 ```
-RemoteDoorBell/
+RemoteDoorBell/b 
 ├── src/
 │   ├── receiver_main.cpp      ← Receiver firmware
 │   ├── remote_main.cpp        ← Remote firmware

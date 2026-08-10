@@ -190,7 +190,7 @@ int registerRemote(uint32_t senderID, uint8_t *mac) {
 }
 
 // ---- Pairing mode -----------------------------------------
-void enterPairingMode() {
+void     enterPairingMode() {
   pairingMode  = true;
   pairingStart = millis();
   DBGLN("[PAIR] Pairing mode OPEN — press remote button within 10s");

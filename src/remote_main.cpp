@@ -21,7 +21,10 @@ extern "C" {
 #define TX_RETRIES    3     
 
 // ⚠️ UPDATE THIS: Paste the MAC address from your receiver's serial monitor
-uint8_t receiverMac[] = {0x68, 0xc6, 0x3a, 0xd6, 0x59, 0x48};
+
+// uint8_t receiverMac[] = {0x68, 0xc6, 0x3a, 0xd6, 0x59, 0x48};
+// MAC: bc:ff:4d:34:e1:c3
+uint8_t receiverMac[] = {0xBC, 0xFF, 0x4D, 0x34, 0xE1, 0xC3};
 
 // AES-128 shared key
 static const uint8_t AES_KEY[AES_KEYLEN] = {
