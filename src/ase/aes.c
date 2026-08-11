@@ -4,7 +4,7 @@
 //  Trimmed to AES-128 ECB only. No heap. No stdlib beyond string.h.
 // ============================================================
 
-#include "aes.h"
+#include "ase/aes.h"
 #include <string.h>
 
 // ---- AES constants ----------------------------------------
